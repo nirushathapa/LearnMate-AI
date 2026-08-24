@@ -1,70 +1,75 @@
 # LearnMate AI
 
-LearnMate AI is a beginner-friendly student learning platform. Students can organize notes, practice flashcards and quizzes, plan study tasks, and view learning progress.
+LearnMate AI is a simple student tool for turning pasted study notes into multiple-choice quizzes and study questions.
 
-## Features
+## Technology
 
-- Landing page and student dashboard
-- Simple signup and login with JWT
-- Local note uploads for PDF, DOCX, and TXT files
-- Notes, study plans, quizzes, flashcards, and progress API structure
-- Demo summary and chat responses ready for a future AI service
-- Responsive layout for desktop and mobile
+- React, Vite, and JavaScript frontend
+- Node.js and Express backend
+- MySQL database through `mysql2`
+- Optional AI provider; a mock response is used when no API key is configured
 
-## Technologies
-
-React, Vite, JavaScript, regular CSS, Node.js, Express, MongoDB, Mongoose, bcryptjs, JSON Web Token, Multer, dotenv, and cors.
-
-## Project Structure
-
-- `frontend/` contains the React and Vite application.
-- `backend/` contains the Express API, Mongoose models, routes, authentication middleware, and local uploads folder.
-
-## Installation
-
-Install frontend packages:
+## Install
 
 ```powershell
-cd frontend
-npm install
+npm --prefix frontend install
+npm --prefix backend install
 ```
 
-Install backend packages:
+## MySQL setup
+
+1. Start your MySQL server.
+2. Open MySQL Workbench or a MySQL terminal.
+3. If you use **MySQL Workbench**, choose **File > Open SQL Script**, open `backend/database.sql`, and click the lightning-bolt **Execute** button. Do not type `SOURCE` into the Workbench query editor.
+
+From the MySQL command-line client, run this command instead:
 
 ```powershell
-cd ..\backend
-npm install
+mysql -u root -p < "C:\Users\Nirusha\OneDrive\Desktop\LearnMate AI\backend\database.sql"
 ```
 
-## MongoDB Setup
+If you are already inside the MySQL command-line client, use:
 
-1. Copy `backend/.env.example` to `backend/.env`.
-2. Set `MONGO_URI` to your local MongoDB or MongoDB Atlas connection string.
-3. Set `JWT_SECRET` to a private random string.
-4. Keep `.env` private. It is already included in `.gitignore`.
-
-## Run the Project
-
-Start the frontend in one terminal:
-
-```powershell
-npm --prefix frontend run dev
+```sql
+SOURCE "C:/Users/Nirusha/OneDrive/Desktop/LearnMate AI/backend/database.sql";
 ```
 
-Start the backend in another terminal:
+Copy `backend/.env.example` to `backend/.env` and set your MySQL values:
+
+```env
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=learnmate_ai
+AI_API_KEY=
+AI_MODEL=gpt-4o-mini
+```
+
+Leave `AI_API_KEY` empty to use the built-in mock questions. Add a provider key to enable AI-generated questions. The key is read only by the backend.
+
+Do not commit `.env`. The root `.gitignore` already excludes it.
+
+## Run
+
+Start the backend in one terminal:
 
 ```powershell
 npm --prefix backend run dev
 ```
 
-The frontend normally runs at `http://localhost:5173` and the backend at `http://localhost:5000`.
+Start the frontend in another:
 
-Test the backend after MongoDB is configured:
-
-```text
-GET http://localhost:5000/api/test
+```powershell
+npm --prefix frontend run dev
 ```
 
-## Future Improvements
+Open `http://localhost:5173`.
 
-Connect a real AI provider, add PDF text extraction, improve file management, and add more complete database-backed dashboard data.
+## API
+
+- `POST /api/quiz/generate`
+- `POST /api/quiz/save`
+- `GET /api/quiz`
+- `POST /api/questions/generate`
+- `POST /api/questions/save`
+- `GET /api/questions`
