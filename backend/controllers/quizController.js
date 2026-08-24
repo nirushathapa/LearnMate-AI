@@ -1,12 +1,19 @@
 const { pool, isDatabaseConnected } = require('../config/db')
 const { generateQuiz } = require('../services/aiService')
+const { extractTextFromImage } = require('../services/ocrService')
 
 async function generateQuizQuestions(req, res) {
-  const { notes, numberOfQuestions = 5, difficulty = 'Medium' } = req.body
-  if (!notes || !notes.trim()) return res.status(400).json({ message: 'Notes are required.' })
+  try {
+    const { notes = '', numberOfQuestions = 5, difficulty = 'Medium' } = req.body
+    let material = notes.trim()
+    if (req.file) material = await extractTextFromImage(req.file.buffer)
+    if (!material) return res.status(422).json({ message: 'We could not read this image. Please upload a clearer image or paste your notes.' })
 
-  const questions = await generateQuiz(notes, Number(numberOfQuestions), difficulty)
-  res.json({ notes, numberOfQuestions: Number(numberOfQuestions), difficulty, questions })
+    const questions = await generateQuiz(material, Number(numberOfQuestions), difficulty, { requireAI: Boolean(req.file) })
+    res.json({ notes: material, numberOfQuestions: Number(numberOfQuestions), difficulty, questions })
+  } catch (error) {
+    res.status(503).json({ message: error.message })
+  }
 }
 
 async function saveQuiz(req, res) {

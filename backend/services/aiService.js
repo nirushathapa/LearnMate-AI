@@ -1,18 +1,24 @@
-function createMockQuiz(numberOfQuestions, difficulty) {
-  const templates = [
-    ['What is the main idea of the study notes?', ['The central concept', 'A minor detail', 'An unrelated topic', 'None of these'], 'The central concept'],
-    ['Which statement best supports the notes?', ['A key supporting fact', 'A random opinion', 'A different subject', 'No statement'], 'A key supporting fact'],
-    ['What should a student remember from this topic?', ['The core definition', 'Only the title', 'A separate example', 'Nothing'], 'The core definition'],
-  ]
+function getNoteSentences(notes) {
+  const content = notes.replace(/Attached material:[\s\S]*$/i, '').replace(/\s+/g, ' ').trim()
+  const sentences = content.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 20)
+  return sentences.length ? sentences : [content || 'the main topic in the study material']
+}
+
+function createMockQuiz(notes, numberOfQuestions, difficulty) {
+  const sentences = getNoteSentences(notes)
   return Array.from({ length: numberOfQuestions }, (_, index) => {
-    const template = templates[index % templates.length]
-    return { question: template[0], options: template[1], correctAnswer: template[2], difficulty }
+    const correctAnswer = sentences[index % sentences.length]
+    const otherAnswers = sentences.filter((_, sentenceIndex) => sentenceIndex !== index % sentences.length)
+    const options = [correctAnswer, ...otherAnswers].slice(0, 4)
+    while (options.length < 4) options.push(`Another detail from the study material (${options.length})`)
+    return { question: `According to the notes, which statement is correct?`, options: options.sort(() => Math.random() - 0.5), correctAnswer, difficulty }
   })
 }
 
-function createMockQuestions(numberOfQuestions, questionType) {
+function createMockQuestions(notes, numberOfQuestions, questionType) {
+  const sentences = getNoteSentences(notes)
   return Array.from({ length: numberOfQuestions }, (_, index) => ({
-    question: `${questionType === 'Long Answer' ? 'Explain in detail' : 'Describe'} the key concept from your notes (question ${index + 1}).`,
+    question: `${questionType === 'Long Answer' ? 'Explain in detail' : 'Describe'} this idea from the notes: ${sentences[index % sentences.length]}`,
   }))
 }
 
@@ -33,24 +39,26 @@ async function requestAI(prompt) {
   return JSON.parse(data.choices[0].message.content)
 }
 
-async function generateQuiz(notes, numberOfQuestions, difficulty) {
+async function generateQuiz(notes, numberOfQuestions, difficulty, options = {}) {
   try {
     const data = await requestAI(`Create ${numberOfQuestions} ${difficulty} multiple-choice questions from these notes. Return JSON with a questions array. Each item must have question, options (exactly four strings), and correctAnswer. Notes: ${notes}`)
     if (data?.questions?.length) return data.questions
   } catch (error) {
     console.warn(error.message)
   }
-  return createMockQuiz(numberOfQuestions, difficulty)
+  if (options.requireAI) throw new Error('AI generation is unavailable. Add a valid AI_API_KEY and try again.')
+  return createMockQuiz(notes, numberOfQuestions, difficulty)
 }
 
-async function generateQuestions(notes, numberOfQuestions, questionType) {
+async function generateQuestions(notes, numberOfQuestions, questionType, options = {}) {
   try {
     const data = await requestAI(`Create ${numberOfQuestions} ${questionType} study questions from these notes. Return JSON with a questions array. Each item must have only question. Notes: ${notes}`)
     if (data?.questions?.length) return data.questions
   } catch (error) {
     console.warn(error.message)
   }
-  return createMockQuestions(numberOfQuestions, questionType)
+  if (options.requireAI) throw new Error('AI generation is unavailable. Add a valid AI_API_KEY and try again.')
+  return createMockQuestions(notes, numberOfQuestions, questionType)
 }
 
 module.exports = { generateQuiz, generateQuestions }

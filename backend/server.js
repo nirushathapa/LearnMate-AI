@@ -21,7 +21,7 @@ app.use('/api/questions', questionRoutes)
 
 app.use((error, req, res, next) => {
   console.error(error.message)
-  res.status(500).json({ message: 'Something went wrong. Please try again.' })
+  res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 500).json({ message: error.message || 'Something went wrong. Please try again.' })
 })
 
 async function startServer() {
