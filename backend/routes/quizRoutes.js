@@ -3,7 +3,7 @@ const { generateQuizQuestions, saveQuiz, listQuizzes } = require('../controllers
 const upload = require('../middleware/uploadMiddleware')
 
 const router = express.Router()
-router.post('/generate', upload.single('image'), generateQuizQuestions)
+router.post('/generate', upload.array('files', 5), generateQuizQuestions)
 router.post('/save', saveQuiz)
 router.get('/', listQuizzes)
 

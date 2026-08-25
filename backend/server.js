@@ -21,7 +21,8 @@ app.use('/api/questions', questionRoutes)
 
 app.use((error, req, res, next) => {
   console.error(error.message)
-  res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 500).json({ message: error.message || 'Something went wrong. Please try again.' })
+  const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : error.message?.startsWith('Unsupported file type') ? 415 : 500
+  res.status(status).json({ message: error.message || 'Something went wrong. Please try again.' })
 })
 
 async function startServer() {
@@ -29,7 +30,7 @@ async function startServer() {
     await connectDatabase()
   } catch (error) {
     console.warn(`MySQL is unavailable: ${error.message}`)
-    console.warn('Starting in mock mode. Generation works; saving requires MySQL.')
+    console.warn('Starting without MySQL. Generation works; saving is unavailable.')
   }
   app.listen(port, () => console.log(`LearnMate AI backend running on http://localhost:${port}`))
 }

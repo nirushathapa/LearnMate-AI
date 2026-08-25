@@ -1,16 +1,30 @@
 const { pool, isDatabaseConnected } = require('../config/db')
 const { generateQuestions } = require('../services/aiService')
-const { extractTextFromImage } = require('../services/ocrService')
+const { extractTextFromFile, normalizeText } = require('../services/ocrService')
 
 async function generateStudyQuestions(req, res) {
   try {
     const { notes = '', numberOfQuestions = 5, questionType = 'Mixed' } = req.body
-    let material = notes.trim()
-    if (req.file) material = await extractTextFromImage(req.file.buffer)
-    if (!material) return res.status(422).json({ message: 'We could not read this image. Please upload a clearer image or paste your notes.' })
+    const text = normalizeText(notes)
+    const extracted = []
+    try {
+      for (const file of req.files || []) {
+        const content = await extractTextFromFile(file)
+        if (content) extracted.push(`[${file.originalname}]\n${content}`)
+      }
+    } catch (error) {
+      if ((req.files || []).some((file) => file.mimetype.startsWith('image/'))) throw new Error('Unable to read the image. Please upload a clearer image.')
+      throw new Error('Unable to extract readable content from this file.')
+    }
+    const material = [text && `USER TEXT:\n${text}`, ...extracted.map((content) => `EXTRACTED FILE CONTENT:\n${content}`)].filter(Boolean).join('\n\n')
+    console.log(`[INPUT TYPE] ${req.files?.map((file) => file.mimetype).join(', ') || 'text'}`)
+    console.log(`[EXTRACTED CONTENT LENGTH] ${extracted.join('\n').length}`)
+    console.log(`[EXTRACTED CONTENT PREVIEW] ${extracted.join('\n').slice(0, 1000)}`)
+    if (material.replace(/\[.*?\]/g, '').trim().length < 20) return res.status(422).json({ message: 'Could not read enough content from this file/image. Please upload a clearer image or readable document.' })
 
-    const questions = await generateQuestions(material, Number(numberOfQuestions), questionType, { requireAI: Boolean(req.file) })
-    res.json({ notes: material, numberOfQuestions: Number(numberOfQuestions), questionType, questions })
+    const questions = await generateQuestions(material, Number(numberOfQuestions), questionType)
+    console.log(`[GENERATED QUESTION COUNT] ${questions.length}`)
+    res.json({ notes: material, extractedContent: material, numberOfQuestions: Number(numberOfQuestions), questionType, questions })
   } catch (error) {
     res.status(503).json({ message: error.message })
   }
@@ -31,7 +45,7 @@ async function saveQuestionSet(req, res) {
 async function listQuestionSets(req, res) {
   if (!isDatabaseConnected()) return res.json([])
   const [rows] = await pool.query('SELECT * FROM question_sets ORDER BY created_at DESC')
-  res.json(rows.map((set) => ({ ...set, questions: JSON.parse(set.questions) })))
+  res.json(rows.map((set) => ({ ...set, questions: typeof set.questions === 'string' ? JSON.parse(set.questions) : set.questions })))
 }
 
 module.exports = { generateStudyQuestions, saveQuestionSet, listQuestionSets }
