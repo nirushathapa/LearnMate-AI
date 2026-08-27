@@ -49,7 +49,13 @@ async function requestAI(prompt) {
   if (!response.ok) {
     if (response.status === 400 || response.status === 401 || response.status === 403) throw new Error('Gemini rejected the API key or request. Check GEMINI_API_KEY and the enabled Gemini API.')
     if (response.status === 404) throw new Error(`Gemini model "${model}" is unavailable. Update GEMINI_MODEL in backend/.env.`)
-    if (response.status === 429) throw new Error('Gemini free-tier rate limit reached. Please wait and try again.')
+    if (response.status === 429) {
+      const error = new Error('Gemini free-tier rate limit reached. Please wait and try again, or configure a different Gemini API key.')
+      error.code = 'GEMINI_RATE_LIMIT'
+      const retryAfter = Number(response.headers.get('retry-after'))
+      if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = Math.ceil(retryAfter)
+      throw error
+    }
     throw new Error('AI request failed.')
   }
   const data = await response.json()

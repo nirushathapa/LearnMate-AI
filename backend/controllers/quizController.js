@@ -26,7 +26,8 @@ async function generateQuizQuestions(req, res) {
     console.log(`[GENERATED QUESTION COUNT] ${questions.length}`)
     res.json({ notes: material, extractedContent: material, numberOfQuestions: Number(numberOfQuestions), difficulty, questions })
   } catch (error) {
-    res.status(503).json({ message: error.message })
+    if (error.code === 'GEMINI_RATE_LIMIT' && error.retryAfter) res.set('Retry-After', String(error.retryAfter))
+    res.status(error.code === 'GEMINI_RATE_LIMIT' ? 429 : 503).json({ message: error.message })
   }
 }
 
