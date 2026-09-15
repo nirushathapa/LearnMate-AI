@@ -5,6 +5,7 @@ const { extractTextFromFile, normalizeText } = require('../services/ocrService')
 async function generateStudyQuestions(req, res) {
   try {
     const { notes = '', numberOfQuestions = 5, questionType = 'Mixed' } = req.body
+    if (!Number.isInteger(Number(numberOfQuestions)) || ![3, 5, 10].includes(Number(numberOfQuestions))) return res.status(400).json({ message: 'Choose 3, 5, or 10 questions.' })
     const text = normalizeText(notes)
     const extracted = []
     try {
@@ -26,19 +27,18 @@ async function generateStudyQuestions(req, res) {
     console.log(`[GENERATED QUESTION COUNT] ${questions.length}`)
     res.json({ notes: material, extractedContent: material, numberOfQuestions: Number(numberOfQuestions), questionType, questions })
   } catch (error) {
-    if (error.code === 'GEMINI_RATE_LIMIT' && error.retryAfter) res.set('Retry-After', String(error.retryAfter))
-    res.status(error.code === 'GEMINI_RATE_LIMIT' ? 429 : 503).json({ message: error.message })
+    res.status(503).json({ message: error.message })
   }
 }
 
 async function saveQuestionSet(req, res) {
   if (!isDatabaseConnected()) return res.status(503).json({ message: 'MySQL is not connected. Question set was not saved.' })
-  const { notes, numberOfQuestions, questionType, questions } = req.body
-  if (!notes || !questions) return res.status(400).json({ message: 'Notes and questions are required.' })
+  const { notes, questionType = 'mixed', questions } = req.body
+  if (!notes || !Array.isArray(questions) || questions.length === 0) return res.status(400).json({ message: 'Notes and questions are required.' })
 
   const [result] = await pool.execute(
-    'INSERT INTO question_sets (notes, number_of_questions, question_type, questions) VALUES (?, ?, ?, ?)',
-    [notes, Number(numberOfQuestions), questionType, JSON.stringify(questions)],
+    'INSERT INTO question_sets (notes, question_type, questions) VALUES (?, ?, ?)',
+    [notes, questionType, JSON.stringify(questions)],
   )
   res.status(201).json({ id: result.insertId, message: 'Question set saved successfully.' })
 }
