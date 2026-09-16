@@ -1,5 +1,5 @@
-const MAX_SOURCE_LENGTH = 30000
-const REQUEST_TIMEOUT_MS = 30000
+const MAX_SOURCE_LENGTH = 12000
+const REQUEST_TIMEOUT_MS = 25000
 const stopWords = new Set('a an and are as at be by for from how in is it of on or that the their these this to was what when which with'.split(' '))
 
 function sourceTokens(text) {
@@ -27,14 +27,13 @@ function validateQuizQuestions(questions, source) {
     const options = item.options.map((option) => option.trim())
     const correctAnswer = item.correctAnswer.trim().toLowerCase()
     if (new Set(options.map((option) => option.toLowerCase())).size !== 4 || options.some((option) => !option)) return false
-    if (!isGrounded(item.question, source, 1, 0.15) || !isGrounded(item.correctAnswer, source, 1, 0.1)) return false
+    if (!isGrounded(item.question, source, 1, 0.1)) return false
     if (!options.some((option) => option.toLowerCase() === correctAnswer)) {
       const replacementIndex = options.findIndex((option) => !isGrounded(option, source, 1, 0.2))
       options[replacementIndex >= 0 ? replacementIndex : 0] = item.correctAnswer.trim()
     }
     if (new Set(options.map((option) => option.toLowerCase())).size !== 4 || !options.some((option) => option.toLowerCase() === correctAnswer)) return false
     item.options = options
-    item.explanation = typeof item.explanation === 'string' ? item.explanation : ''
     return true
   })
 }
@@ -49,7 +48,9 @@ function parseAIJson(text) {
 }
 
 function validateStudyQuestions(questions, source) {
-  return (Array.isArray(questions) ? questions : []).filter((item) => item && typeof item.question === 'string' && isGrounded(item.question, source, 1, 0.3))
+  return (Array.isArray(questions) ? questions : [])
+    .map((item) => typeof item === 'string' ? { question: item } : item)
+    .filter((item) => item && typeof item.question === 'string' && isGrounded(item.question, source, 1, 0.3))
 }
 
 async function requestAI(prompt, responseFormat, maxTokens) {
@@ -67,7 +68,7 @@ async function requestAI(prompt, responseFormat, maxTokens) {
         max_tokens: maxTokens,
         response_format: responseFormat,
         messages: [
-          { role: 'system', content: 'You are an AI educational assistant for LearnMate AI. Generate questions strictly from the provided study material. Do not introduce information that is not present in the study material unless absolutely necessary. Return only valid JSON in the requested structure.' },
+          { role: 'system', content: 'Create questions only from the source. Return only the requested JSON. No explanation or extra text.' },
           { role: 'user', content: prompt },
         ],
       }),
@@ -123,7 +124,7 @@ function responseFormatFor(count, quiz) {
 }
 
 function maxTokensFor(count, quiz) {
-  return quiz ? count * 110 + 60 : count * 35 + 50
+  return quiz ? count * 80 + 40 : count * 25 + 30
 }
 
 function questionKey(question) {
@@ -146,10 +147,13 @@ async function generateQuizBatch(source, batchSize, difficulty, existingQuestion
   const retryPrompt = `Create exactly ${batchSize} new short MCQs as JSON. Each needs 4 short options and correctAnswer copied exactly from one option. Do not repeat questions. Use only this source:\n${source}`
   let lastError
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    console.log(`[QUIZ BATCH] Generating ${batchSize}${attempt ? ' (retry)' : ''}`)
     try {
       const data = await requestAI(attempt ? retryPrompt : prompt, responseFormatFor(batchSize, true), maxTokensFor(batchSize, true))
       const questions = validateQuizQuestions(data?.questions, source)
-      if (questions.length === batchSize) return questions
+      const uniqueBatch = uniqueQuestions([...existingQuestions, ...questions]).slice(existingQuestions.length)
+      console.log(`[QUIZ BATCH] Generated: ${uniqueBatch.length}`)
+      if (uniqueBatch.length === batchSize) return uniqueBatch
       lastError = new Error(`LM Studio returned ${questions.length} of ${batchSize} requested questions.`)
     } catch (error) {
       lastError = error
@@ -162,21 +166,19 @@ async function generateQuiz(notes, numberOfQuestions, difficulty, options = {}) 
   if (!Number.isInteger(Number(numberOfQuestions)) || ![3, 5, 10].includes(Number(numberOfQuestions))) throw new Error('Choose 3, 5, or 10 questions.')
   if (notes.length > MAX_SOURCE_LENGTH) throw new Error('Study material is too large. Please upload a smaller document or split it into sections.')
   const source = notes.slice(0, MAX_SOURCE_LENGTH)
+  console.log(`[QUIZ REQUEST] Requested: ${numberOfQuestions}`)
   console.log(`[AI SOURCE LENGTH] ${source.length}`)
   const collected = []
-  let attempts = 0
-  while (collected.length < numberOfQuestions && attempts < numberOfQuestions * 3) {
-    const batchSize = numberOfQuestions === 3 && collected.length === 0 ? 3 : Math.min(2, numberOfQuestions - collected.length)
-    try {
-      const batch = await generateQuizBatch(source, batchSize, difficulty, collected)
-      const combined = uniqueQuestions([...collected, ...batch])
-      if (combined.length > collected.length) collected.push(...combined.slice(collected.length))
-    } catch (error) {
-      if (attempts >= numberOfQuestions * 3 - 1) throw error
-    }
-    attempts += 1
+  const batchPlan = numberOfQuestions === 3 ? [3] : numberOfQuestions === 5 ? [3, 2] : [5, 5]
+  for (const plannedBatchSize of batchPlan) {
+    const batchSize = Math.min(plannedBatchSize, numberOfQuestions - collected.length)
+    if (batchSize <= 0) break
+    const batch = await generateQuizBatch(source, batchSize, difficulty, collected)
+    const combined = uniqueQuestions([...collected, ...batch])
+    if (combined.length > collected.length) collected.push(...combined.slice(collected.length))
   }
   if (collected.length !== numberOfQuestions) throw new Error(`LM Studio could not produce exactly ${numberOfQuestions} source-grounded quiz questions.`)
+  console.log(`[QUIZ RESULT] Final count: ${collected.length}`)
   return collected.map((question) => ({ ...question, difficulty }))
 }
 
@@ -185,14 +187,20 @@ async function generateQuestions(notes, numberOfQuestions, questionType, options
   if (notes.length > MAX_SOURCE_LENGTH) throw new Error('Study material is too large. Please upload a smaller document or split it into sections.')
   const source = notes.slice(0, MAX_SOURCE_LENGTH)
   console.log(`[AI SOURCE LENGTH] ${source.length}`)
-  const prompt = `Create exactly ${numberOfQuestions} ${questionType} study questions. Return only JSON: {"questions":[{"question":""}]}. Keep questions short, distinct, and answerable from the source only.\nSOURCE:\n${source}`
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const retryPrompt = `Return exactly ${numberOfQuestions} short study questions as JSON. Use only this source:\n${source}`
-    const data = await requestAI(attempt ? retryPrompt : prompt, responseFormatFor(Number(numberOfQuestions), false), maxTokensFor(Number(numberOfQuestions), false))
-    const questions = validateStudyQuestions(data?.questions, source).slice(0, numberOfQuestions)
-    if (questions.length === numberOfQuestions) return questions
+  const batchPlan = numberOfQuestions === 3 ? [3] : numberOfQuestions === 5 ? [3, 2] : [5, 5]
+  const collected = []
+  for (const batchSize of batchPlan) {
+    const existing = collected.map((question) => questionKey(question.question)).join(' | ')
+    const prompt = `Create exactly ${batchSize} short ${questionType} questions. JSON only: {"questions":[{"question":""}]}. Use only the source. Do not repeat these: ${existing || 'none'}\nSOURCE:\n${source}`
+    let batchQuestions = []
+    for (let attempt = 0; attempt < 2 && batchQuestions.length < batchSize; attempt += 1) {
+      const data = await requestAI(prompt, responseFormatFor(batchSize, false), maxTokensFor(batchSize, false))
+      batchQuestions = uniqueQuestions([...collected, ...validateStudyQuestions(data?.questions, source)]).slice(collected.length, collected.length + batchSize)
+    }
+    if (batchQuestions.length !== batchSize) throw new Error(`LM Studio returned ${batchQuestions.length} of ${batchSize} requested questions.`)
+    collected.push(...batchQuestions)
   }
-  throw new Error(`LM Studio could not produce exactly ${numberOfQuestions} source-grounded questions. Try a smaller number or provide more study material.`)
+  return collected
 }
 
 module.exports = { generateQuiz, generateQuestions }

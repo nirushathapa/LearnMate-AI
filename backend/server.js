@@ -9,7 +9,14 @@ const questionRoutes = require('./routes/questionRoutes')
 const app = express()
 const port = process.env.PORT || 5000
 
-app.use(cors())
+app.use(cors({
+  origin: (origin, callback) => {
+    const isLocalFrontend = !origin || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(origin)
+    callback(null, isLocalFrontend)
+  },
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+}))
 app.use(express.json())
 app.get('/api/test', (req, res) => {
   res.json({ message: 'LearnMate AI backend is working!' })

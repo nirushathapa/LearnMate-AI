@@ -4,18 +4,19 @@ USE learnmate_ai;
 CREATE TABLE IF NOT EXISTS quizzes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   notes TEXT NOT NULL,
-  difficulty VARCHAR(10) DEFAULT 'medium',
+  number_of_questions INT NOT NULL,
+  difficulty VARCHAR(20) NOT NULL,
   questions JSON NOT NULL,
   score INT DEFAULT NULL,
   total_questions INT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS question_sets (
   id INT AUTO_INCREMENT PRIMARY KEY,
   notes TEXT NOT NULL,
-  question_type VARCHAR(10) DEFAULT 'mixed',
+  number_of_questions INT NOT NULL,
+  difficulty VARCHAR(20),
   questions JSON NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-SELECT USER(), CURRENT_USER();

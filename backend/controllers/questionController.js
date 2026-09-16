@@ -32,15 +32,20 @@ async function generateStudyQuestions(req, res) {
 }
 
 async function saveQuestionSet(req, res) {
-  if (!isDatabaseConnected()) return res.status(503).json({ message: 'MySQL is not connected. Question set was not saved.' })
-  const { notes, questionType = 'mixed', questions } = req.body
-  if (!notes || !Array.isArray(questions) || questions.length === 0) return res.status(400).json({ message: 'Notes and questions are required.' })
+  try {
+    if (!isDatabaseConnected()) return res.status(503).json({ message: 'MySQL is not connected. Question set was not saved.' })
+    const { notes, numberOfQuestions, difficulty = null, questions } = req.body
+    if (!notes || !Number.isInteger(Number(numberOfQuestions)) || !Array.isArray(questions) || questions.length === 0) return res.status(400).json({ message: 'Notes, number of questions, and questions are required.' })
 
-  const [result] = await pool.execute(
-    'INSERT INTO question_sets (notes, question_type, questions) VALUES (?, ?, ?)',
-    [notes, questionType, JSON.stringify(questions)],
-  )
-  res.status(201).json({ id: result.insertId, message: 'Question set saved successfully.' })
+    const [result] = await pool.execute(
+      'INSERT INTO question_sets (notes, number_of_questions, difficulty, questions) VALUES (?, ?, ?, ?)',
+      [notes, Number(numberOfQuestions), difficulty, JSON.stringify(questions)],
+    )
+    res.status(201).json({ id: result.insertId, message: 'Question set saved successfully.' })
+  } catch (error) {
+    console.error('[QUESTION SET SAVE ERROR]', error.message)
+    res.status(500).json({ message: 'Question set could not be saved. Please check the MySQL database.' })
+  }
 }
 
 async function listQuestionSets(req, res) {
